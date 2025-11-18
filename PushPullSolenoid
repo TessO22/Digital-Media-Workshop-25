@@ -1,0 +1,17 @@
+#define SOLENOID_PIN 3   // Solenoid control pin (through transistor/relay)
+
+void setup() {
+  pinMode(SOLENOID_PIN, OUTPUT);
+  digitalWrite(SOLENOID_PIN, LOW);  // Start OFF
+}
+
+void loop() {
+  
+  // Turn solenoid ON for 1 second
+  digitalWrite(SOLENOID_PIN, HIGH);
+  delay(1000);
+
+  // Turn solenoid OFF for 2 seconds
+  digitalWrite(SOLENOID_PIN, LOW);
+  delay(2000);
+}
