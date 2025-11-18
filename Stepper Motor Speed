@@ -1,0 +1,63 @@
+// ================= DRV8825 SETUP =================
+int driverPUL = 3;   // STEP pin
+int driverDIR = 2;   // DIR pin
+
+// ===================================================
+//   SPEED + DURATION CHOREOGRAPHY TABLE
+//   speed (us delay) = lower = faster
+//   duration (ms) = how long to run that speed
+// ===================================================
+struct MotorEvent {
+  int speed;                // microseconds between pulses
+  unsigned long duration;   // how long to run (milliseconds)
+};
+
+// EDIT YOUR SPEED (5(faster) to 2500(slower)) + DURATION HERE miliseconds
+MotorEvent events[] = {
+  {2500, 10000},   
+  {300,  500},   
+  {10,  1500},   
+  {5,  3500},   
+  {115,  6000},
+  
+};
+
+int numEvents = sizeof(events) / sizeof(events[0]);
+
+// ================== SETUP ==================
+void setup() {
+  pinMode(driverPUL, OUTPUT);
+  pinMode(driverDIR, OUTPUT);
+
+  // Motor direction (change HIGH/LOW to reverse)
+  digitalWrite(driverDIR, HIGH);
+}
+
+// ================== MAIN LOOP ==================
+void loop() {
+
+  for (int i = 0; i < numEvents; i++) {
+
+    int currentSpeed = events[i].speed;
+    unsigned long runTime = events[i].duration;
+
+    unsigned long start = millis();
+
+    // Run this speed for the specified duration
+    while (millis() - start < runTime) {
+      stepPulse(currentSpeed);
+    }
+  }
+
+  // Optional pause between full cycles
+  // delay(500);
+}
+
+// ================== STEP FUNCTION ==================
+void stepPulse(int microDelay) {
+  digitalWrite(driverPUL, HIGH);
+  delayMicroseconds(microDelay);
+  digitalWrite(driverPUL, LOW);
+  delayMicroseconds(microDelay);
+}
+
