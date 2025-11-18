@@ -1,0 +1,43 @@
+// ----- Relay Pins -----
+const int relayPins[4] = {3, 4, 5, 6};
+
+// ----- Tempo Settings -----
+int bpm = 120;                     // Beats per minute
+unsigned long beatDuration = 500;  // Computed in setup()
+
+// ----- Pattern Definition -----
+// Each row = one beat
+// Each column = relay state (1 = ON, 0 = OFF)
+//
+// Example: 8-beat loop (this is where you can play around with rhythm)
+int pattern[][4] = {
+  {1, 0, 0, 1},
+  {0, 1, 0, 0},
+  {1, 1, 0, 0},
+  {0, 0, 1, 1},
+  {1, 0, 1, 0},
+  {0, 1, 0, 1},
+  {1, 1, 1, 0},
+  {0, 0, 0, 1}
+};
+
+int patternLength = sizeof(pattern) / sizeof(pattern[0]); // Auto-length
+
+void setup() {
+  for (int i = 0; i < 4; i++) {
+    pinMode(relayPins[i], OUTPUT);
+    digitalWrite(relayPins[i], LOW);
+  }
+
+  // Calculate beat duration from BPM
+  beatDuration = 60000 / bpm;
+}
+
+void loop() {
+  for (int step = 0; step < patternLength; step++) {
+    for (int r = 0; r < 4; r++) {
+      digitalWrite(relayPins[r], pattern[step][r] ? HIGH : LOW);
+    }
+    delay(beatDuration);
+  }
+}
