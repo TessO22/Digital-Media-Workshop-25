@@ -1,0 +1,90 @@
+// ================= DRV8825 PIN SETUP =================
+int driverPUL = 3;   // STEP
+int driverDIR = 2;   // DIR
+
+// ================= MOTOR SETUP =======================
+// Set your motor + microstepping steps per revolution here
+int stepsPerRevolution = 3000;   // ← your motor setting
+
+// Steps per one degree (360° = full rotation)
+float stepsPerDegree = (float)stepsPerRevolution / 360.0;
+
+// Keep track of current position in steps
+long currentPosition = 0;
+
+
+// ================= DEGREE CHOREOGRAPHY ===================
+// This is part you edit to choreograph
+// Each number is a degree movement RELATIVE to the previous position
+// Positive = clockwise, Negative = counterclockwise
+
+float degreeMoves[] = {
+  22.5,   // move 22.5° forward
+  -45,    // move backwards 45°
+  90,     // forward 90°
+  -10,    // back 10°
+  180,    // half turn
+  30,     // 
+  -60     // 
+};
+
+int numMoves = sizeof(degreeMoves) / sizeof(degreeMoves[0]);
+
+
+// =================== SETUP ============================
+void setup() {
+  pinMode(driverPUL, OUTPUT);
+  pinMode(driverDIR, OUTPUT);
+
+  Serial.begin(9600);
+  Serial.println("DRV8825 Degree Choreography Ready");
+}
+
+
+// =================== LOOP ============================
+void loop() {
+
+  for (int i = 0; i < numMoves; i++) {
+
+    float deg = degreeMoves[i];
+    long stepDelta = deg * stepsPerDegree;
+
+    moveDegrees(stepDelta);
+
+    delay(300);  // small pause between moves (optional)
+  }
+
+  // Optional pause before repeating the sequence
+  // delay(1000);
+}
+
+
+// ================= MOVE FUNCTION ======================
+void moveDegrees(long stepDelta) {
+
+  if (stepDelta == 0) return;
+
+  // Set direction
+  if (stepDelta > 0) {
+    digitalWrite(driverDIR, HIGH);
+  } else {
+    digitalWrite(driverDIR, LOW);
+    stepDelta = -stepDelta; // make positive for stepping loop
+  }
+
+  Serial.print("Moving ");
+  Serial.print(stepDelta);
+  Serial.println(" steps");
+
+  // Perform the step movement
+  for (long s = 0; s < stepDelta; s++) {
+    digitalWrite(driverPUL, HIGH);
+    delayMicroseconds(400);   // speed control
+    digitalWrite(driverPUL, LOW);
+    delayMicroseconds(400);
+  }
+
+  // Update current position
+  // (not used for absolute movement here, but useful for future upgrades)
+  currentPosition += (digitalRead(driverDIR) == HIGH ? stepDelta : -stepDelta);
+}
