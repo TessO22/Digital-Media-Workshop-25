@@ -1,0 +1,132 @@
+
+#include <AccelStepper.h>
+#include <string.h>
+#include <math.h>
+
+// ----------------------------------
+// 1. PITCH PIPE NOTE POSITIONS
+// ----------------------------------
+
+const char *noteNames[] = {
+  "C", "C#", "D", "D#", "E", "F", "F#",
+  "G", "G#", "A", "A#", "B", "C5"
+};
+
+const float noteDegrees[] = {
+  0, 27.69, 55.38, 83.07, 110.76,
+  138.46, 166.15, 193.84, 221.53,
+  249.23, 276.92, 304.61, 332.30
+};
+
+// ----------------------------------
+// 2. STEPPER MOTOR CONFIGURATION
+// ----------------------------------
+
+// Original Pipe 1 wiring
+#define STEP_PIN 3
+#define DIR_PIN 2
+
+AccelStepper stepper(
+  AccelStepper::DRIVER,
+  STEP_PIN,
+  DIR_PIN
+);
+
+const int microstepping = 32;
+const int stepperResolution = 200 * microstepping;
+
+const float maxSpeedSteps = 30000.0;
+const float accelerationSteps = 20000.0;
+
+// ----------------------------------
+// 3. NOTE SEQUENCE
+// ----------------------------------
+
+struct Note {
+  const char *name;
+  unsigned long duration;
+};
+
+// Example sequence using original durations
+Note sequence[] = {
+  {"A", 1700},
+  {"B", 850},
+  {"C5", 1700},
+  {"A", 7650},
+  {"G", 1700},
+  {"D", 3400}
+};
+
+const int numNotes =
+  sizeof(sequence) / sizeof(sequence[0]);
+
+int currentNote = 0;
+unsigned long noteStartTime = 0;
+bool finished = false;
+
+// ----------------------------------
+// 4. POSITIONING FUNCTION
+// ----------------------------------
+
+void moveToNote(const char *noteName) {
+
+  for (int i = 0; i < 13; i++) {
+
+    if (strcmp(noteName, noteNames[i]) == 0) {
+
+      long steps = lround(
+        noteDegrees[i] * stepperResolution / 360.0
+      );
+
+      stepper.moveTo(steps);
+
+      Serial.print("Moving to: ");
+      Serial.println(noteName);
+
+      return;
+    }
+  }
+}
+
+// ----------------------------------
+// 5. SETUP
+// ----------------------------------
+
+void setup() {
+  Serial.begin(9600);
+
+  stepper.setMaxSpeed(maxSpeedSteps);
+  stepper.setAcceleration(accelerationSteps);
+
+  // Assumes physically calibrated zero
+  stepper.setCurrentPosition(0);
+
+  moveToNote(sequence[0].name);
+  noteStartTime = millis();
+}
+
+// ----------------------------------
+// 6. MAIN LOOP
+// ----------------------------------
+
+void loop() {
+
+  if (finished) return;
+
+  stepper.run();
+
+  if (millis() - noteStartTime >=
+      sequence[currentNote].duration) {
+
+    currentNote++;
+
+    if (currentNote >= numNotes) {
+      finished = true;
+      Serial.println("Sequence finished");
+      return;
+    }
+
+    moveToNote(sequence[currentNote].name);
+    noteStartTime = millis();
+  }
+}
