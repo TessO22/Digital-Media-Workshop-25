@@ -1,0 +1,62 @@
+
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+// Servo driver channels
+int servoChannels[] = {2, 3, 4, 5};
+int numServos = 4;
+
+// Servo pulse calibration (adjust if needed)
+#define SERVOMIN  150
+#define SERVOMAX  600
+
+// Timing
+int servoDelay = 300;  // Delay between each servo movement (ms)
+int stepDelay = 500;   // Delay between each 15-degree step (ms)
+
+// Move a servo to a specified angle
+void moveServo(int channel, int angle) {
+  int pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
+  pwm.setPWM(channel, 0, pulse);
+}
+
+void setup() {
+  pwm.begin();
+  pwm.setPWMFreq(50);
+
+  delay(1000);
+
+  // Start all servos at 0 degrees
+  for (int i = 0; i < numServos; i++) {
+    moveServo(servoChannels[i], 0);
+  }
+
+  delay(1000);
+}
+
+void loop() {
+
+  // Move UP: 15, 30, 45, 60, 75, 90
+  for (int angle = 15; angle <= 90; angle += 15) {
+
+    for (int i = 0; i < numServos; i++) {
+      moveServo(servoChannels[i], angle);
+      delay(servoDelay);
+    }
+
+    delay(stepDelay);
+  }
+
+  // Move DOWN: 75, 60, 45, 30, 15, 0
+  for (int angle = 75; angle >= 0; angle -= 15) {
+
+    for (int i = 0; i < numServos; i++) {
+      moveServo(servoChannels[i], angle);
+      delay(servoDelay);
+    }
+
+    delay(stepDelay);
+  }
+}
