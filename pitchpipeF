@@ -1,0 +1,288 @@
+
+
+#include <AccelStepper.h>
+#include <DRV8825.h>  
+
+// Motor pins
+#define MOTOR_STEP_PIN 3 //drv8825 STEP
+#define MOTOR_DIR_PIN 2 //drv8825 DIR
+
+// Encoder pins following https://www.omc-stepperonline.com/download/17HS15-1504-ME1K.pdf
+#define ENCODER_A_PLUS 18 //EA+ Brown wire
+#define ENCODER_A_MINUS 19 //EA- Orange Wire
+#define ENCODER_B_PLUS 20 //EB+ Blue Wire
+#define ENCODER_B_MINUS 21 //EB- Green Wire
+
+//not using the Z+, Z- 
+//#define ENCODER_Z_PLUS //EZ+ Yellow Wire PIN need to INT pin
+//#define ENCODER_Z_MINUS //EZ- White Wire PIN need to INT pin
+
+// Relay pin
+#define RELAY_PIN 5 //
+
+// Note names and corresponding degrees for pitch pipe with 13 holes in it. 360/13 = 27.692307692307692 
+// The "rest" note is a special note that indicates a pause in the music, the "rest" note is assigned a note degree of -1. This value can be used to identify rests in the code and won't move the stepper motor and shouldn't not activating the relay, it may not be nessacary.
+
+const char *noteNames[] = { "F", "F#", "G", "G#", "A", "A#", "B", "C", "C#", "D", "D#", "E","F5","rest"}; 
+const float noteDegrees[] = {1, 26, 54, 82, 109, 137, 165, 192, 220, 248, 275, 303, 331, -1};
+const int numNotes = sizeof(noteNames) / sizeof(noteNames[0]);
+
+// 50BPM-Duration names and values in milliseconds. took this from the code you sent, you can could rename this and choose shorter names
+const char *durationNames[] = {"verse","twowhole", "whole","dwhole", "half",  "quarter","eighth", "sixteenth","drest","wrest","hrest", "qrest","erest"}; 
+const unsigned long durations[] = {19200, 96000,  7200,   7200,     4800,     2400,       1200,   600,    96000,     7200,       4800,   2400, 1200};
+const int numDurations = sizeof(durationNames) / sizeof(durationNames[0]);
+  
+
+
+// Define a struct to hold note and duration information
+struct NoteWithDuration {
+  const char *noteName;
+  const char *durationName;
+  unsigned long durationValue;
+};
+
+
+// Song Compostion to play goes here.  make sure its a banger!  Song composition now with with note-duration pairs this should be composition easier.
+
+/*
+Value in (MS) Add additional duration names in line 86 and values in line 87 Any rest measure also needs to be added to line 191 example. strcmp(Song[i].durationName, "wrest") == 0 ||
+
+hold = 10000
+double whole = 8000
+whole = 4000
+half = 2000
+half+eighth = 2500
+quarter = 1000
+dquarter = 1500
+deighth = 750
+eighth = 500
+trill = 250
+dtrill = 425
+tsec = 125
+wrest = 4000
+hrest = 2000
+qrest = 1000
+derest = 750
+erest = 500
+
+
+*/
+
+const NoteWithDuration Song[] = {
+
+ {"rest", "half"},
+  {"F", "half"},
+   {"F#", "half"},  
+   {"G", "half"},
+    {"G#", "half"},
+     {"A", "half"},
+      {"A#", "half"},
+       {"B", "half"},
+        {"C", "half"},
+         {"C#", "half"},
+          {"D", "half"},
+           {"D#", "half"},
+            {"E", "half"},
+             {"F5", "half"},
+
+              {"rest", "half"},
+
+  {"F", "quarter"},
+   {"F#", "quarter"},  
+   {"G", "quarter"},
+    {"G#", "quarter"},
+     {"A", "quarter"},
+      {"A#", "quarter"},
+       {"B", "quarter"},
+        {"C", "quarter"},
+         {"C#", "quarter"},
+          {"D", "quarter"},
+           {"D#", "quarter"},
+            {"E", "quarter"},
+             {"F5", "quarter"},
+ {"rest", "quarter"},
+  {"F5", "quarter"},
+   {"E", "quarter"},  
+   {"D#", "quarter"},
+    {"D", "quarter"},
+     {"C#", "quarter"},
+      {"C", "quarter"},
+       {"B", "quarter"},
+        {"A#", "quarter"},
+         {"A", "quarter"},
+          {"G#", "quarter"},
+           {"G", "quarter"},
+            {"F#", "quarter"},
+             {"F", "quarter"},
+    
+};
+//calculates the number of elements and size of tune in the array.
+const int numSongNotes = sizeof(Song) / sizeof(Song[0]);
+
+// Microstepping I changed this value to match your motor and driver configuration 
+const int microstepping = 32; // This is what the DRV8825 is set to for 1/32 microstepping
+
+// Stepper resolution
+const int stepperResolution = 200 * microstepping; // 200 steps per revolution * microstepping
+
+//Encoder setup
+AccelStepper stepper(1, MOTOR_STEP_PIN, MOTOR_DIR_PIN);
+const float encoderTicksPerStep = 1.0;
+volatile int encoderTicks = 0;
+
+
+void setup() {
+  Serial.begin(9600);
+
+  // Stepper motor setup
+  stepper.setMaxSpeed(20000);
+  stepper.setAcceleration(10000);
+
+  // Setup the relay
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
+
+  // Set encoder pin modes
+  pinMode(ENCODER_A_PLUS, INPUT_PULLUP);
+  pinMode(ENCODER_A_MINUS, INPUT_PULLUP);
+  pinMode(ENCODER_B_PLUS, INPUT_PULLUP);
+  pinMode(ENCODER_B_MINUS, INPUT_PULLUP);
+  //pinMode(ENCODER_Z_PLUS, INPUT_PULLUP); // Not using
+  //pinMode(ENCODER_Z_MINUS, INPUT_PULLUP); // Not using
+
+  // Attach interrupts
+    attachInterrupt(digitalPinToInterrupt(ENCODER_A_PLUS), encoderInterrupt, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_B_PLUS), encoderInterrupt, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(ENCODER_Z_PLUS), encoderInterrupt, CHANGE); // Not Using
+  //attachInterrupt(digitalPinToInterrupt(ENCODER_Z_MINUS), encoderInterrupt, CHANGE); // Not Using
+}
+
+void loop() {
+  // Play the tune
+  for (int i = 0; i < numSongNotes; i++) {
+    // Find the note index using the array
+    int noteIndex = -1;
+    for (int j = 0; j < numNotes; j++) {
+      if (strcmp(Song[i].noteName, noteNames[j]) == 0) {
+        noteIndex = j;
+        break;
+      }
+    }
+
+    // Check if it's a measured rest Whole Rest, Half rest, Quarter rest, derest and erest and set the air relay off
+    if (strcmp(Song[i].durationName, "wrest") == 0 || strcmp(Song[i].durationName, "hrest") == 0 || strcmp(Song[i].durationName, "qrest") == 0 || strcmp(Song[i].durationName, "derest") == 0 || strcmp(Song[i].durationName, "erest") == 0 ) { // strcmp(Song[i].durationName, "rest name") == 0 ||
+      digitalWrite(RELAY_PIN, LOW); // Ensure that air is off
+      Serial.print("Rest note: "); //Print to serial 
+      Serial.println(Song[i].durationName); // Rest Duration
+      delay(getDurationValue(Song[i].durationName)); // Delay for the rest duration
+      continue;
+    }
+
+    // Check if it's a "rest" and set the air relay off
+    if (strcmp(Song[i].noteName, "rest") == 0) {
+      digitalWrite(RELAY_PIN, LOW); // Ensure that air is off
+      Serial.print("Rest note: "); //Print to serial 
+      Serial.println(Song[i].noteName); // Rest Duration
+      delay(getDurationValue(Song[i].durationName)); // Delay for the rest duration
+      continue;
+    }
+
+    // Move the stepper motor and print to serial
+    if (noteIndex != -1) {
+      int targetSteps = noteDegrees[noteIndex] * stepperResolution / 360;
+      stepper.moveTo(targetSteps);
+      Serial.print("Moving to note: ");
+      Serial.print(Song[i].noteName);
+      Serial.print(" (");
+      Serial.print(noteDegrees[noteIndex]);
+      Serial.println(" degrees)");
+
+      while (stepper.distanceToGo() != 0) {
+        stepper.run();
+      }
+    }
+
+    // Activate relay for the corresponding duration only after stepper has stopped moving
+    if (stepper.distanceToGo() == 0) {
+      digitalWrite(RELAY_PIN, HIGH);
+      delay(getDurationValue(Song[i].durationName));
+      digitalWrite(RELAY_PIN, LOW);
+    }
+
+    // Print note duration
+    Serial.print("Note duration: ");
+    Serial.print(Song[i].durationName);
+    Serial.print(" (");
+    Serial.print(getDurationValue(Song[i].durationName));
+    Serial.println(" ms)");
+
+    // Little pause between notes seems to make it smoother
+    delay(375);
+  }
+}
+
+void encoderInterrupt() {
+  // Read encoder pins
+  int encoderA = digitalRead(ENCODER_A_PLUS);
+  int encoderB = digitalRead(ENCODER_B_PLUS);
+  int encoderAMinus = digitalRead(ENCODER_A_MINUS);
+  int encoderBMinus = digitalRead(ENCODER_B_MINUS);
+  //int encoderZPlus = digitalRead(ENCODER_Z_PLUS); //Not using
+  //int encoderZMinus = digitalRead(ENCODER_Z_MINUS); //Not using
+
+  // Check if both encoder pins are not HIGH (invalid state)
+  if (encoderA == HIGH && encoderB == HIGH) {
+    return; // Do nothing and exit interrupt routine
+  }
+
+  if (digitalRead(ENCODER_A_PLUS) == HIGH) {
+    if (stepper.distanceToGo() != 0) { // check if the stepper is moving
+      encoderTicks++;
+    }
+  } else {
+    if (stepper.distanceToGo() != 0) { // check if the stepper is moving
+      encoderTicks--;
+    }
+  }
+
+  // Determine direction
+  if (encoderA == encoderB && encoderAMinus == encoderBMinus) {
+    // Clockwise
+    encoderTicks += encoderTicksPerStep;
+  } else {
+    // Counterclockwise
+    encoderTicks -= encoderTicksPerStep;
+  }
+}
+
+
+unsigned long getDurationValue(const char *durationName) { //takes a duration name as input (e.g., "quarter", "whole", "half", etc.) and returns the corresponding duration value in milliseconds (ms)
+  for (int i = 0; i < numDurations; i++) {
+    if (strcmp(durationName, durationNames[i]) == 0) {
+      return durations[i];
+    }
+  }
+  return 0; // Return 0 if the duration name is not found
+}
+
+void setupSongInfo(NoteWithDuration* songInfo) { //sets up an array of NoteWithDuration structs, named songInfo, which contains the note, names and values for each element in the array.
+  for (int i = 0; i < numSongNotes; i++) {
+    songInfo[i].noteName = Song[i].noteName;
+    songInfo[i].durationName = Song[i].durationName;
+    songInfo[i].durationValue = getDurationValue(Song[i].durationName);
+  }
+}
+
+//For Debuging prints Note, name & value
+void printSongInfo(NoteWithDuration* songInfo) { 
+  Serial.println("Song information:");
+  for (int i = 0; i < numSongNotes; i++) {
+    Serial.print("Note: ");
+    Serial.print(songInfo[i].noteName);
+    Serial.print(", Duration: ");
+    Serial.print(songInfo[i].durationName);
+    Serial.print(" (");
+    Serial.print(songInfo[i].durationValue);
+    Serial.println(" ms)");
+  }
+}
