@@ -1,0 +1,88 @@
+
+const int motorPins[] = {4, 5, 6, 7, 8, 9};
+const int motorNumbers[] = {3, 4, 5, 6, 7, 8};
+
+const int numMotors = 6;
+
+// MOTOR SEQUENCE
+struct MotorEvent {
+  int motor;
+  unsigned long duration;
+};
+
+MotorEvent sequence[] = {
+  {3, 1000},
+  {4, 1000},
+  {5, 1500},
+  {6, 500},
+  {7, 2000},
+  {8, 1000},
+  {0, 1000}  // Rest: all motors OFF
+};
+
+const int numEvents =
+  sizeof(sequence) / sizeof(sequence[0]);
+
+int currentEvent = 0;
+unsigned long eventStartTime = 0;
+bool finished = false;
+
+// TURN ALL MOTORS OFF
+void allOff() {
+  for (int i = 0; i < numMotors; i++) {
+    digitalWrite(motorPins[i], LOW);
+  }
+}
+
+// START MOTOR EVENT
+void startEvent(int index) {
+  allOff();
+
+  int motor = sequence[index].motor;
+
+  for (int i = 0; i < numMotors; i++) {
+    if (motorNumbers[i] == motor) {
+      digitalWrite(motorPins[i], HIGH);
+
+      Serial.print("Motor ");
+      Serial.print(motor);
+      Serial.println(" ON");
+    }
+  }
+
+  if (motor == 0) {
+    Serial.println("REST");
+  }
+
+  eventStartTime = millis();
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  for (int i = 0; i < numMotors; i++) {
+    digitalWrite(motorPins[i], LOW);
+    pinMode(motorPins[i], OUTPUT);
+  }
+
+  startEvent(0);
+}
+
+void loop() {
+  if (finished) return;
+
+  if (millis() - eventStartTime >=
+      sequence[currentEvent].duration) {
+
+    currentEvent++;
+
+    if (currentEvent >= numEvents) {
+      allOff();
+      finished = true;
+      Serial.println("Sequence finished");
+      return;
+    }
+
+    startEvent(currentEvent);
+  }
+}
